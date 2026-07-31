@@ -79,6 +79,19 @@ class Detector:
             return f"anomaly score {score:.3f} < {self.cfg.anomaly_threshold}"
         return None
 
+    def clear_signals(self) -> None:
+        """
+        Drop any pending signature signal.
+
+        Called once a heal has finished. Detection runs in a separate process from the
+        healer and keeps polling throughout the heal, so it re-raises the flag for the
+        artefact that is still on disk during the earlier (forensics/destroy) phases.
+        Left in place, that stale edge is picked up as a second, phantom incident. This is
+        safe: if the artefact somehow survived the heal, the next poll re-raises the flag
+        within one detection period, so a genuinely unremediated breach is never dropped.
+        """
+        Path(self.cfg.breach_signal_path).unlink(missing_ok=True)
+
     # ---- fusion -----------------------------------------------------------
     def evaluate(self, window: Optional[Window] = None) -> Optional[BreachEvent]:
         sig = self._signature_hit()

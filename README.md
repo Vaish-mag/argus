@@ -54,6 +54,7 @@ shared Knowledge) — the standard self-healing reference model — see `argus/c
 | Hash-manifest gate | verify every clone against a manifest before promotion | `manifest.py` (`verify`) |
 | Golden-image fallback | keep a golden baseline so a slow-burn compromise can't be re-promoted | `snapshotter.diff_against_golden` + `healer._select_source` |
 | MTTD / MTTR | core experimental metrics, graphed | `metrics.py` + `lab/plot_results.py` |
+| End-to-end recovery | attack → healthy again, the comparison that includes the human notice delay | `metrics.Incident.total_recovery` |
 | Anomaly (ML) layer | catch unseen patterns, not just signatures | `anomaly.py` (IsolationForest) |
 
 ## What's in this folder?

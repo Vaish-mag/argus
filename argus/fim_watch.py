@@ -55,7 +55,15 @@ class FIMWatcher:
         print(f"[fim_watch] watching {self.root} every {self.poll_sec}s "
               f"against {self.cfg.golden_manifest}")
         while True:
-            deviations = self.check_once()
+            try:
+                deviations = self.check_once()
+            except Exception as exc:
+                # A detection daemon must not exit on a transient filesystem error: if it
+                # dies, the whole loop silently stops detecting and every later trial
+                # reports a timeout that looks like a detection failure.
+                print(f"[fim_watch] scan error (continuing): {exc!r}")
+                time.sleep(self.poll_sec)
+                continue
             if deviations and not flag.exists():
                 detail = f"fim_watch: {'; '.join(deviations[:5])}"
                 flag.write_text(detail, encoding="utf-8")
@@ -66,12 +74,11 @@ class FIMWatcher:
 def main() -> None:  # pragma: no cover -- thin CLI wrapper
     ap = argparse.ArgumentParser(description="Lightweight FIM fallback (no Wazuh needed)")
     ap.add_argument("--config", default="config/argus.yaml")
-    ap.add_argument("--root", default="runtime/webroot",
-                     help="host directory to watch (the DVWA bind-mount webroot)")
+    ap.add_argument("--root", help="host directory to watch (defaults to host_webroot)")
     ap.add_argument("--period", type=float, default=2.0)
     args = ap.parse_args()
     cfg = ArgusConfig.load(args.config)
-    FIMWatcher(cfg, args.root, args.period).run()
+    FIMWatcher(cfg, args.root or cfg.host_webroot, args.period).run()
 
 
 if __name__ == "__main__":

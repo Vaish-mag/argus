@@ -50,11 +50,26 @@ class Incident:
             return None
         return round(self.t_promoted - self.t_detect, 3)
 
+    @property
+    def total_recovery(self) -> Optional[float]:
+        """
+        End-to-end exposure: attack injected -> service healthy again.
+
+        Report this alongside MTTR, not instead of it. MTTR starts the clock at *detection*,
+        so in the manual arm the operator-notice delay lands in MTTD and cancels out of the
+        MTTR comparison -- which makes the two arms look nearly identical even though the
+        human gap is precisely what the controller removes. This metric is where that gap
+        is visible, and it is the fair arm-to-arm comparison of time-to-service-restored.
+        """
+        if self.t_attack is None or self.t_promoted is None:
+            return None
+        return round(self.t_promoted - self.t_attack, 3)
+
 
 class MetricsLog:
     """Append-only incident log with a summary reducer for the Results chapter."""
 
-    HEADER = [f.name for f in fields(Incident)] + ["mttd", "mttr"]
+    HEADER = [f.name for f in fields(Incident)] + ["mttd", "mttr", "total_recovery"]
 
     def __init__(self, csv_path: str | Path):
         self.path = Path(csv_path)
@@ -67,6 +82,7 @@ class MetricsLog:
         row = asdict(inc)
         row["mttd"] = inc.mttd
         row["mttr"] = inc.mttr
+        row["total_recovery"] = inc.total_recovery
         with open(self.path, "a", newline="", encoding="utf-8") as fh:
             csv.DictWriter(fh, fieldnames=self.HEADER).writerow(row)
 
@@ -93,11 +109,14 @@ class MetricsLog:
         rows = self.load()
         mttd = [float(r["mttd"]) for r in rows if r.get("mttd") not in ("", "None", None)]
         mttr = [float(r["mttr"]) for r in rows if r.get("mttr") not in ("", "None", None)]
+        total = [float(r["total_recovery"]) for r in rows
+                 if r.get("total_recovery") not in ("", "None", None)]
         fps = sum(1 for r in rows if r.get("false_positive") in ("True", "true", True))
         detections = sum(1 for r in rows if r.get("t_detect") not in ("", "None", None))
         return {
             "MTTD_sec": self.summary(mttd),
             "MTTR_sec": self.summary(mttr),
+            "TotalRecovery_sec": self.summary(total),
             "detections": detections,
             "false_positives": fps,
             "false_positive_rate": round(fps / detections, 4) if detections else 0.0,
