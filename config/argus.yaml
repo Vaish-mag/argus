@@ -1,0 +1,35 @@
+# Argus runtime configuration
+# Every value the viva might ask you to justify lives here -- no magic numbers in code.
+
+# --- what we protect -------------------------------------------------------
+protected_container: "argus-web"                 # the current "main" DVWA instance
+golden_image: "argus/dvwa-golden:latest"         # known-good baseline image you build once
+protected_path: "/var/www/html"                  # guarded path inside the container
+isolated_network: "argus_protected"              # docker network the main sits on
+health_url: "http://localhost:8080/login.php"    # promotion health check (DVWA login page)
+
+# --- snapshot / clone cadence ---------------------------------------------
+snapshot_interval_sec: 900                        # 15 minutes (spec: 10-20 min)
+snapshots_dir: "results/snapshots"
+golden_manifest: "config/golden_manifest.json"    # built once from the pristine web root
+keep_snapshots: 12                                # retain last N cycles (~3h at 15 min)
+
+# paths under the web root that legitimately change (so churn != tampering).
+# DVWA writes uploaded files here; declare it volatile so normal uploads don't
+# invalidate a snapshot's clean status. In the experiment we keep this EMPTY so the
+# webshell-upload scenario is caught -- widen only for a genuinely dynamic app.
+volatile_paths: []
+
+# --- detection -------------------------------------------------------------
+wazuh_alerts_path: "runtime/wazuh_alerts.json"    # optional: tailed alert stream
+breach_signal_path: "runtime/breach.flag"         # Wazuh active-response drops this
+anomaly_threshold: -0.15                           # IsolationForest score cutoff
+anomaly_model_path: "results/anomaly_model.joblib"
+
+# --- healing / forensics ---------------------------------------------------
+forensics_dir: "results/forensics"
+health_retries: 10
+health_retry_delay_sec: 2.0
+
+# --- metrics ---------------------------------------------------------------
+incidents_csv: "results/incidents.csv"

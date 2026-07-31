@@ -1,0 +1,46 @@
+# Argus lab topology.
+#
+# Two networks by design:
+#   argus_protected  - where the "main" DVWA instance lives; the healer disconnects a
+#                      compromised container from THIS network to isolate it.
+#   argus_attack     - the attacker container's reachability into the target. Keeping it
+#                      separate makes "cut the network" observable and keeps the whole
+#                      lab isolated from your real LAN.
+#
+# The DVWA web root is bind-mounted to ./runtime/webroot on the host so the Wazuh agent
+# (running on the WSL2 host) can do file-integrity monitoring on it directly, and so the
+# Argus controller can snapshot/restore without needing to exec into the container.
+#
+# NOTE: DVWA is a DELIBERATELY vulnerable teaching application. It must ONLY ever run on
+# this isolated lab network, never exposed to a real network. That is a Limitations point.
+
+services:
+  web:
+    image: vulnerables/web-dvwa:latest      # standard academic vulnerable target
+    container_name: argus-web
+    networks:
+      - argus_protected
+      - argus_attack
+    ports:
+      - "8080:80"                            # host:container -> health_url uses 8080
+    volumes:
+      - ./runtime/webroot:/var/www/html      # host-visible web root for FIM + snapshots
+    restart: "no"                            # Argus manages lifecycle, not Docker
+
+  attacker:
+    image: alpine:3.19                       # minimal; the harness runs from the host anyway
+    container_name: argus-attacker
+    networks:
+      - argus_attack
+    command: ["sleep", "infinity"]
+    profiles: ["attack"]                     # only started for experiments: --profile attack
+
+networks:
+  argus_protected:
+    name: argus_protected
+    driver: bridge
+    internal: false
+  argus_attack:
+    name: argus_attack
+    driver: bridge
+    internal: true                           # attacker cannot reach the internet

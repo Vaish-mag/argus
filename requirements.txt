@@ -1,0 +1,10 @@
+# Argus orchestration dependencies (install inside WSL2 Ubuntu venv)
+docker>=7.0.0          # Docker SDK for Python -> talks to Docker Desktop engine
+PyYAML>=6.0            # config loading
+scikit-learn>=1.3.0   # IsolationForest anomaly detector
+joblib>=1.3.0         # model persistence
+numpy>=1.24.0         # feature vectors
+requests>=2.31.0      # lab attack harness / health probing
+pytest>=7.4.0         # test suite
+matplotlib>=3.7.0     # Results chapter charts (MTTD/MTTR/FPR)
+pandas>=2.0.0         # results aggregation

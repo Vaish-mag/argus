@@ -1,0 +1,40 @@
+<!--
+  Argus custom Wazuh rules.
+  Place the contents inside /var/ossec/etc/rules/local_rules.xml on the Wazuh manager
+  (or agent-local ruleset). These sit on top of Wazuh's built-in syscheck (FIM) rules
+  and raise the severity of any change inside the protected web root so that our
+  active-response trigger (level >= 10) fires.
+
+  Rule 550/553/554 are Wazuh's built-in FIM "file modified / deleted / added" rules;
+  we override to escalate ONLY when the change is inside the protected path.
+-->
+<group name="argus,syscheck,">
+
+  <!-- A NEW file appeared in the web root: classic webshell-upload / dropper signature -->
+  <rule id="100200" level="12">
+    <if_group>syscheck</if_group>
+    <field name="file">/var/www/html/</field>
+    <match>added</match>
+    <description>Argus: new file created in protected web root (possible webshell/dropper)</description>
+    <group>argus_breach,attack,</group>
+  </rule>
+
+  <!-- An EXISTING protected file was modified: defacement / injection signature -->
+  <rule id="100201" level="12">
+    <if_group>syscheck</if_group>
+    <field name="file">/var/www/html/</field>
+    <match>modified</match>
+    <description>Argus: protected web-root file modified (possible defacement/injection)</description>
+    <group>argus_breach,attack,</group>
+  </rule>
+
+  <!-- A protected file was DELETED: tampering / anti-forensics signature -->
+  <rule id="100202" level="10">
+    <if_group>syscheck</if_group>
+    <field name="file">/var/www/html/</field>
+    <match>deleted</match>
+    <description>Argus: protected web-root file deleted (possible tampering)</description>
+    <group>argus_breach,attack,</group>
+  </rule>
+
+</group>

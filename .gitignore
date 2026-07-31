@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.claude/
+
+# generated at runtime / during experiments -- keep the folders, not their contents
+runtime/*
+!runtime/.gitkeep
+results/*
+!results/.gitkeep
+results/forensics/*
+!results/forensics/.gitkeep
