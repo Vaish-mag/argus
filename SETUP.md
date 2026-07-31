@@ -22,8 +22,14 @@ Commands prefixed `PS>` run in **Windows PowerShell (Admin)**; commands prefixed
 
 - A **Windows 11** (64-bit) laptop or PC you can install software on, with virtualization
   enabled in BIOS/UEFI, and an admin account (most personal laptops already qualify).
-- At least **4 GB of RAM** and about **6 GB of free disk space** (the optional Wazuh step
-  in Step 11 needs **8 GB RAM** / **15 GB disk** instead).
+- **8 GB of RAM installed** (with ~3 GB genuinely *free* when you start) and about **6 GB
+  of free disk space**. The optional Wazuh step (Step 11) needs **8 GB free** on top of
+  that, so it is out of reach on most student laptops — this is exactly why the default
+  detection path is the built-in watcher in Step 7.
+  > ⚠️ **On a 6 GB machine this is tight.** WSL2 claims ~50% of total RAM on startup, so
+  > with little free memory it fails with
+  > `Insufficient system resources … CreateVm/HCS/0x800705aa` and can take the running
+  > containers down with it. If you hit that, see **Troubleshooting → "WSL won't start"**.
 - A steady **internet connection** and **about an hour**, mostly spent waiting on
   downloads.
 - The **Argus project folder** (the one containing this file) — keep it somewhere easy to
@@ -171,23 +177,44 @@ baseline for debugging later. 🎉
 
 **What this does:** starts DVWA, the practice website, in its own sealed box.
 
+First, **pull the image and seed the web root.** This seeding step is required and easy to
+miss: `docker-compose.yml` bind-mounts `./runtime/webroot` over the container's
+`/var/www/html`, and an *empty* host folder therefore **hides** DVWA's built-in files.
+The image's startup script (`/main.sh`) only starts MySQL and Apache — it never copies its
+own files out — so without seeding, every page returns **404**. We copy the files out of a
+throwaway container once, then let the mount take over:
+
 ```
 $ cd ~/argus
 $ mkdir -p runtime/webroot
+$ docker compose pull web
+$ docker run -d --name argus_seed vulnerables/web-dvwa:latest sleep 300
+$ sleep 2 && docker cp argus_seed:/var/www/html/. runtime/webroot/
+$ docker rm -f argus_seed
+```
+
+**✅ Verify the seeding worked** before starting the real service — you should see DVWA's
+files (`login.php`, `index.php`, `dvwa/`, …):
+```
+$ ls runtime/webroot | head
+```
+
+Now start the protected service on top of the seeded web root:
+```
 $ docker compose up -d web
 ```
-Docker pulls DVWA and bind-mounts its web root to `~/argus/runtime/webroot`. First time,
-the download can take a few minutes.
 
-**✅ Verify:**
+**✅ Verify:** (allow ~15s for MySQL and Apache to finish starting)
 ```
-$ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/login.php   # 200 or 302
-$ ls runtime/webroot | head                                                  # DVWA files visible
+$ sleep 15
+$ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/login.php   # expect 200 or 302
 ```
 Then open `http://localhost:8080` in a browser and click **"Create / Reset Database"**
 once so the app is fully live.
 
-**If it didn't work:** rerun `docker compose up -d web`, give it a minute, refresh.
+**If it didn't work:** a **404** means the web root wasn't seeded — redo the seeding block
+above. A **000**/connection-refused usually just means the container is still booting;
+wait 15s and retry the curl.
 
 ⚠️ **Limitations:** DVWA is intentionally vulnerable and must stay on the isolated lab
 networks defined in `docker-compose.yml`. A production target would be a hardened app;
@@ -424,6 +451,20 @@ container state (it does for DVWA).
   containing `manager`, and use that exact name. (Only relevant if you did Step 11.)
 - **The website won't open at http://localhost:8080.** Rerun `docker compose up -d web`,
   wait a minute, refresh.
+- **Every DVWA page returns 404 (but the container is `Up`).** The web root wasn't seeded,
+  so the empty bind mount is hiding DVWA's files. Redo the seeding block in Step 5. Check
+  with `ls runtime/webroot` — if it's empty, that's the cause.
+- **`Insufficient system resources … Wsl/Service/CreateInstance/CreateVm/HCS/0x800705aa`
+  ("WSL won't start").** Windows can't allocate the WSL2 VM because too little RAM is
+  free. Either free memory (close browsers/editors, or reboot), or cap what WSL asks for
+  by creating `C:\Users\<you>\.wslconfig` with:
+  ```
+  [wsl2]
+  memory=2GB
+  processors=2
+  ```
+  then run `wsl --shutdown` in PowerShell and start again. Note this failure can stop
+  already-running containers, so re-check Step 5 afterwards with `docker ps`.
 - **First heal fails with "no such image."** You skipped the `docker tag` command in
   Step 6 — the golden image tag is required, not optional.
 - **Still stuck?** Note the exact red error text and show it to your supervisor — it
