@@ -56,22 +56,52 @@ def main() -> None:
     if not argus_mttr:
         sys.exit("no Argus incidents found -- run the experiment first")
 
+    def _outlier_note(label: str, vals: list[float]) -> list[str]:
+        """
+        Flag values far above the median.
+
+        A single stalled trial (a starved or suspended VM keeps wall-clock running while
+        the container does nothing) can be orders of magnitude larger than the rest and
+        will wreck any mean. Surfacing it explicitly is the difference between reporting a
+        nonsensical headline and reporting a measurement artefact you understood.
+        """
+        if len(vals) < 3:
+            return []
+        med = statistics.median(vals)
+        bad = [v for v in vals if med > 0 and v > 10 * med]
+        if not bad:
+            return []
+        return [
+            f"    !! {len(bad)} outlier(s) in Argus {label}: max={max(bad):.0f}s vs "
+            f"median={med:.2f}s.",
+            "       That ratio is not controller behaviour -- it is almost certainly an",
+            "       environment stall (VM starved of RAM, host suspended). Re-run on an",
+            "       idle machine, or exclude and state that you did.",
+        ]
+
     def _compare(label: str, a_vals: list[float], b_vals: list[float]) -> list[str]:
         out = []
-        a_mean = statistics.mean(a_vals)
-        out.append(f"Argus {label}:    n={len(a_vals)} mean={a_mean:.2f}s "
-                   f"median={statistics.median(a_vals):.2f}s")
+        a_mean, a_med = statistics.mean(a_vals), statistics.median(a_vals)
+        out.append(f"Argus {label}:    n={len(a_vals)} mean={a_mean:.2f}s median={a_med:.2f}s")
         if b_vals:
-            b_mean = statistics.mean(b_vals)
+            b_mean, b_med = statistics.mean(b_vals), statistics.median(b_vals)
             out.append(f"Baseline {label}: n={len(b_vals)} mean={b_mean:.2f}s "
-                       f"median={statistics.median(b_vals):.2f}s")
-            out.append(f"==> {label} reduction: {100 * (b_mean - a_mean) / b_mean:.1f}%")
+                       f"median={b_med:.2f}s")
+            # Median first, deliberately: it is robust to a single stalled trial, and it is
+            # the statistic consistent with the rank-based Mann-Whitney test reported below.
+            if b_med:
+                out.append(f"==> {label} reduction (median, quote this): "
+                           f"{100 * (b_med - a_med) / b_med:.1f}%")
+            if b_mean:
+                out.append(f"    {label} reduction (mean, outlier-sensitive): "
+                           f"{100 * (b_mean - a_mean) / b_mean:.1f}%")
             try:
                 from scipy.stats import mannwhitneyu
                 u, p = mannwhitneyu(a_vals, b_vals, alternative="less")
-                out.append(f"Mann-Whitney U={u:.1f}, p={p:.4g} (Argus < baseline)")
+                out.append(f"    Mann-Whitney U={u:.1f}, p={p:.4g} (Argus < baseline)")
             except ImportError:
-                out.append("(install scipy for the Mann-Whitney U significance test)")
+                out.append("    (install scipy for the Mann-Whitney U significance test)")
+        out += _outlier_note(label, a_vals)
         return out
 
     lines = _compare("MTTR", argus_mttr, base_mttr)
