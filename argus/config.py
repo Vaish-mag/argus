@@ -56,7 +56,10 @@ class ArgusConfig:
     # ~20 GB. The filesystem capture of the protected path happens either way; turn this
     # off for long measurement runs and note the trade-off in your write-up.
     commit_forensic_image: bool = True
-    health_retries: int = 10
+    # 25 x 2s = 50s: DVWA needs ~15-20s for MySQL + Apache, and a cold start is slower,
+    # so a 20s budget expired on the first restarts of a run and silently dropped those
+    # trials from the results.
+    health_retries: int = 25
     health_retry_delay_sec: float = 2.0
 
     # --- metrics -----------------------------------------------------------
