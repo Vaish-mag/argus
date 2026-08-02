@@ -156,9 +156,11 @@ def main() -> None:
         lines.append("  These fired with no injected attack -- discuss them as false")
         lines.append("  positives, not as recovery measurements.")
 
-    # A baseline trial whose health check never passed records no MTTR and silently
-    # drops out of the comparison. Since those are the SLOWEST recoveries, dropping them
-    # flatters the manual arm and understates the controller's advantage -- so say so.
+    # A baseline trial whose health check never passed records no MTTR and drops out of
+    # the comparison silently. Flag the exclusion, but do not assert which way it biases
+    # the result: a trial can miss the health deadline because recovery genuinely ran long
+    # OR because the retry budget was simply too small, and those pull in opposite
+    # directions. Report n honestly and let the reader judge.
     base_total_rows = 0
     if base_csv.exists():
         with open(base_csv, newline="") as fh:
@@ -166,10 +168,10 @@ def main() -> None:
     if base_total_rows and len(base_mttr) < base_total_rows:
         lines.append("")
         lines.append(f"!! Baseline: only {len(base_mttr)} of {base_total_rows} trials "
-                     f"recovered healthily.")
-        lines.append("   The rest never passed their health check and are excluded. Those")
-        lines.append("   are the slowest recoveries, so this UNDERSTATES the improvement.")
-        lines.append("   Raise health_retries in config/argus.yaml and re-run the arm.")
+                     f"recovered healthily; the rest are excluded.")
+        lines.append("   Report the excluded count alongside the result -- the direction of")
+        lines.append("   the bias is not knowable from the timings alone. If the health")
+        lines.append("   budget was the limit, raise health_retries and re-run the arm.")
 
     (results / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
