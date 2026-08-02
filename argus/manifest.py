@@ -50,13 +50,23 @@ class Manifest:
     # ---- construction -----------------------------------------------------
     @classmethod
     def build(cls, root: os.PathLike | str, source: str, clean: bool = True) -> "Manifest":
-        """Walk *root* and hash every regular file, storing paths relative to root."""
+        """
+        Walk *root* and hash every regular file, storing paths relative to root.
+
+        Tolerates files vanishing between the directory walk and the hash: the monitored
+        tree is live, and a restore replaces its whole contents, so a scan that races one
+        would otherwise raise FileNotFoundError and kill the monitoring process. A file
+        that disappears mid-scan is simply omitted -- the next scan sees the settled tree.
+        """
         root = Path(root)
         files: Dict[str, str] = {}
         for p in sorted(root.rglob("*")):
-            if p.is_file():
-                rel = p.relative_to(root).as_posix()
-                files[rel] = sha256_file(p)
+            try:
+                if p.is_file():
+                    rel = p.relative_to(root).as_posix()
+                    files[rel] = sha256_file(p)
+            except (FileNotFoundError, PermissionError, OSError):
+                continue
         return cls(root=str(root), created_at=time.time(), source=source,
                    clean=clean, files=files)
 

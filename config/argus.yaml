@@ -4,14 +4,17 @@
 # --- what we protect -------------------------------------------------------
 protected_container: "argus-web"                 # the current "main" DVWA instance
 golden_image: "argus/dvwa-golden:latest"         # known-good baseline image you build once
-protected_path: "/var/www/html"                  # guarded path inside the container
+protected_path: "/var/www/html"                  # guarded path INSIDE the container
+host_webroot: "runtime/webroot"                  # the HOST side of that bind mount
 isolated_network: "argus_protected"              # docker network the main sits on
 health_url: "http://localhost:8080/login.php"    # promotion health check (DVWA login page)
+host_port: 8080                                  # host port a restored main republishes
 
 # --- snapshot / clone cadence ---------------------------------------------
 snapshot_interval_sec: 900                        # 15 minutes (spec: 10-20 min)
 snapshots_dir: "results/snapshots"
 golden_manifest: "config/golden_manifest.json"    # built once from the pristine web root
+golden_webroot: "runtime/golden_webroot"           # pristine CONTENT copy matching that manifest
 keep_snapshots: 12                                # retain last N cycles (~3h at 15 min)
 
 # paths under the web root that legitimately change (so churn != tampering).
@@ -22,12 +25,17 @@ volatile_paths: []
 
 # --- detection -------------------------------------------------------------
 wazuh_alerts_path: "runtime/wazuh_alerts.json"    # optional: tailed alert stream
-breach_signal_path: "runtime/breach.flag"         # Wazuh active-response drops this
+breach_signal_path: "runtime/breach.flag"         # Wazuh / fim_watch drops this
+attack_marker_path: "runtime/attack_marker.json"  # harness records t_attack here -> enables MTTD
 anomaly_threshold: -0.15                           # IsolationForest score cutoff
 anomaly_model_path: "results/anomaly_model.joblib"
 
 # --- healing / forensics ---------------------------------------------------
 forensics_dir: "results/forensics"
+# docker-commit the compromised container for maximum evidence fidelity. Costs ~1 GB of
+# image per incident, so set false for long measurement runs (the filesystem capture of
+# the protected path still happens either way).
+commit_forensic_image: true
 health_retries: 10
 health_retry_delay_sec: 2.0
 

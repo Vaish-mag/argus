@@ -27,13 +27,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 
-def _load_mttr(path: Path) -> list[float]:
+def _load_metric(path: Path, col: str = "mttr") -> list[float]:
     if not path.exists():
         return []
     out = []
     with open(path, newline="") as fh:
         for r in csv.DictReader(fh):
-            v = r.get("mttr")
+            v = r.get(col)
             if v not in ("", "None", None):
                 out.append(float(v))
     return out
@@ -51,27 +51,82 @@ def main() -> None:
     argus_csv = results / "incidents.csv"
     base_csv = results / "incidents_baseline.csv"
 
-    argus_mttr = _load_mttr(argus_csv)
-    base_mttr = _load_mttr(base_csv)
+    argus_mttr = _load_metric(argus_csv, "mttr")
+    base_mttr = _load_metric(base_csv, "mttr")
     if not argus_mttr:
         sys.exit("no Argus incidents found -- run the experiment first")
 
-    lines = []
-    a_mean = statistics.mean(argus_mttr)
-    lines.append(f"Argus MTTR:    n={len(argus_mttr)} mean={a_mean:.2f}s "
-                 f"median={statistics.median(argus_mttr):.2f}s")
-    if base_mttr:
-        b_mean = statistics.mean(base_mttr)
-        reduction = 100 * (b_mean - a_mean) / b_mean
-        lines.append(f"Baseline MTTR: n={len(base_mttr)} mean={b_mean:.2f}s "
-                     f"median={statistics.median(base_mttr):.2f}s")
-        lines.append(f"==> MTTR reduction: {reduction:.1f}%")
-        try:
-            from scipy.stats import mannwhitneyu
-            u, p = mannwhitneyu(argus_mttr, base_mttr, alternative="less")
-            lines.append(f"Mann-Whitney U={u:.1f}, p={p:.4g} (Argus < baseline)")
-        except ImportError:
-            lines.append("(install scipy for the Mann-Whitney U significance test)")
+    def _outlier_note(label: str, vals: list[float]) -> list[str]:
+        """
+        Flag values far above the median.
+
+        A single stalled trial (a starved or suspended VM keeps wall-clock running while
+        the container does nothing) can be orders of magnitude larger than the rest and
+        will wreck any mean. Surfacing it explicitly is the difference between reporting a
+        nonsensical headline and reporting a measurement artefact you understood.
+        """
+        if len(vals) < 3:
+            return []
+        med = statistics.median(vals)
+        bad = [v for v in vals if med > 0 and v > 10 * med]
+        if not bad:
+            return []
+        return [
+            f"    !! {len(bad)} outlier(s) in Argus {label}: max={max(bad):.0f}s vs "
+            f"median={med:.2f}s.",
+            "       That ratio is not controller behaviour -- it is almost certainly an",
+            "       environment stall (VM starved of RAM, host suspended). Re-run on an",
+            "       idle machine, or exclude and state that you did.",
+        ]
+
+    def _compare(label: str, a_vals: list[float], b_vals: list[float]) -> list[str]:
+        out = []
+        a_mean, a_med = statistics.mean(a_vals), statistics.median(a_vals)
+        out.append(f"Argus {label}:    n={len(a_vals)} mean={a_mean:.2f}s median={a_med:.2f}s")
+        if b_vals:
+            b_mean, b_med = statistics.mean(b_vals), statistics.median(b_vals)
+            out.append(f"Baseline {label}: n={len(b_vals)} mean={b_mean:.2f}s "
+                       f"median={b_med:.2f}s")
+            # Median first, deliberately: it is robust to a single stalled trial, and it is
+            # the statistic consistent with the rank-based Mann-Whitney test reported below.
+            if b_med:
+                out.append(f"==> {label} reduction (median, quote this): "
+                           f"{100 * (b_med - a_med) / b_med:.1f}%")
+            if b_mean:
+                out.append(f"    {label} reduction (mean, outlier-sensitive): "
+                           f"{100 * (b_mean - a_mean) / b_mean:.1f}%")
+            try:
+                from scipy.stats import mannwhitneyu
+                u, p = mannwhitneyu(a_vals, b_vals, alternative="less")
+                out.append(f"    Mann-Whitney U={u:.1f}, p={p:.4g} (Argus < baseline)")
+            except ImportError:
+                out.append("    (install scipy for the Mann-Whitney U significance test)")
+        out += _outlier_note(label, a_vals)
+        return out
+
+    lines = _compare("MTTR", argus_mttr, base_mttr)
+    lines.append("  note: MTTR starts at DETECTION, so the manual arm's operator-notice")
+    lines.append("  delay sits in MTTD and cancels out here. See total recovery below.")
+
+    # End-to-end attack -> healthy again. This is the comparison that includes the human
+    # notice delay the controller removes, so it is the headline resilience result.
+    argus_total = _load_metric(argus_csv, "total_recovery")
+    base_total = _load_metric(base_csv, "total_recovery")
+    if argus_total:
+        lines.append("")
+        lines += _compare("TotalRecovery(attack->healthy)", argus_total, base_total)
+
+    argus_mttd_vals = _load_metric(argus_csv, "mttd")
+    if argus_mttd_vals:
+        lines.append("")
+        lines.append(f"Argus MTTD:    n={len(argus_mttd_vals)} "
+                     f"mean={statistics.mean(argus_mttd_vals):.2f}s "
+                     f"median={statistics.median(argus_mttd_vals):.2f}s")
+    if base_csv.exists():
+        base_mttd = _load_metric(base_csv, "mttd")
+        if base_mttd:
+            lines.append(f"Baseline MTTD: n={len(base_mttd)} "
+                         f"mean={statistics.mean(base_mttd):.2f}s (modelled notice delay)")
 
     (results / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
@@ -87,6 +142,18 @@ def main() -> None:
         plt.ylabel("MTTR (seconds)")
         plt.title("Mean-Time-To-Recover: self-healing MTD vs static baseline")
         plt.savefig(results / "fig_mttr_comparison.png", dpi=150, bbox_inches="tight")
+
+    # --- fig 1b: end-to-end recovery comparison (the headline figure) ---
+    if argus_total and base_total:
+        plt.figure()
+        names = ["Argus", "Static baseline"]
+        try:
+            plt.boxplot([argus_total, base_total], tick_labels=names)
+        except TypeError:
+            plt.boxplot([argus_total, base_total], labels=names)
+        plt.ylabel("attack -> healthy again (seconds)")
+        plt.title("End-to-end recovery time (includes operator-notice delay)")
+        plt.savefig(results / "fig_total_recovery.png", dpi=150, bbox_inches="tight")
 
     # --- fig 2: MTTD histogram ---
     argus_mttd = [float(v) for v in _load_col(argus_csv, "mttd")

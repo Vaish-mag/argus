@@ -27,6 +27,7 @@ Then: python lab/attacker/run_experiment.py --summary
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -49,14 +50,33 @@ def _wait_for_incident(log: MetricsLog, since: int, timeout: float = 120.0):
     return None
 
 
+def _mark_attack(cfg: ArgusConfig, t_attack: float, scenario: str) -> None:
+    """
+    Tell the (separate) controller process when this attack was injected.
+
+    The controller cannot be handed `t_attack` as an argument across a process boundary,
+    so without this handoff it records t_attack=None -- MTTD becomes unmeasurable and
+    every genuine incident is mislabelled a false positive.
+    """
+    p = Path(cfg.attack_marker_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"t_attack": t_attack, "scenario": scenario}), encoding="utf-8")
+
+
 def run_argus_arm(cfg: ArgusConfig, scenario: str, trials: int) -> None:
-    webroot = Path(cfg.protected_path)
+    # NOTE: the HOST side of the bind mount -- cfg.protected_path is the path *inside*
+    # the container and does not exist on the host.
+    webroot = Path(cfg.host_webroot)
+    if not webroot.is_dir():
+        sys.exit(f"host web root not found: {webroot} (is the lab up? see SETUP.md Step 5)")
     log = MetricsLog(cfg.incidents_csv)
     inject = SCENARIOS[scenario]
-    print(f"[exp] ARGUS arm: {trials} x {scenario}")
+    print(f"[exp] ARGUS arm: {trials} x {scenario} (webroot={webroot})")
     for i in range(trials):
         before = len(log.load())
-        t_attack = inject(webroot)
+        t_attack = time.time()
+        _mark_attack(cfg, t_attack, scenario)      # must precede the injection
+        inject(webroot)
         inc = _wait_for_incident(log, before)
         if inc is None:
             print(f"  trial {i+1}: TIMEOUT (no heal recorded)")

@@ -13,9 +13,17 @@ A representative manual recovery for a defaced/backdoored web root is:
   4. start container docker start argus-web
   5. verify          curl the health URL
 
-MTTR_baseline = t_verified - t_attack   (there is no separate "detect" step; a human
-"detects" by noticing, folded into NOTICE_DELAY_SEC). We record it into a separate CSV
-so the Results chapter can compare the two distributions.
+Metric bookkeeping (this arm records into its own CSV so the two distributions can be
+compared side by side):
+
+  t_detect  = t_attack + NOTICE_DELAY_SEC   -- a human "detects" by noticing
+  MTTR      = t_promoted - t_detect         -- the REPAIR phase only
+  TotalRecovery = t_promoted - t_attack     -- end-to-end, includes the notice delay
+
+Quote TotalRecovery as the headline comparison. Because MTTR starts its clock at
+detection, the operator-notice delay lands in MTTD and cancels out of an MTTR-only
+comparison -- making the two arms look nearly identical even though closing that human
+gap is the entire point of the controller. Reporting MTTR alone understates the result.
 
 The NOTICE_DELAY models the human-in-the-loop gap that Argus removes. Report the value
 you choose and justify it (industry mean-time-to-acknowledge figures are a good anchor --
@@ -43,22 +51,35 @@ def _last_clone(cfg: ArgusConfig) -> Path | None:
     return snaps[0] if snaps else None
 
 
+def _restore_source(cfg: ArgusConfig) -> Path | None:
+    """Newest clone if one exists, else the pristine golden web-root copy."""
+    clone = _last_clone(cfg)
+    if clone is not None:
+        return clone
+    golden = Path(cfg.golden_webroot)
+    return golden if golden.is_dir() and any(golden.iterdir()) else None
+
+
 def _manual_recover(cfg: ArgusConfig) -> None:
     subprocess.run(["docker", "stop", cfg.protected_container], capture_output=True)
-    clone = _last_clone(cfg)
-    webroot = Path(cfg.protected_path)
-    if clone is not None:
+    source = _restore_source(cfg)
+    # HOST side of the bind mount; cfg.protected_path is the in-container path and
+    # iterating/deleting it on the host would either fail or clobber the wrong directory.
+    webroot = Path(cfg.host_webroot)
+    if source is not None and webroot.is_dir():
         for item in webroot.iterdir():
-            if item.is_file():
-                item.unlink()
+            if item.is_file() or item.is_symlink():
+                item.unlink(missing_ok=True)
             else:
                 shutil.rmtree(item, ignore_errors=True)
-        shutil.copytree(clone, webroot, dirs_exist_ok=True)
+        shutil.copytree(source, webroot, dirs_exist_ok=True)
     subprocess.run(["docker", "start", cfg.protected_container], capture_output=True)
 
 
 def run_baseline_arm(cfg: ArgusConfig, scenario: str, trials: int) -> None:
-    webroot = Path(cfg.protected_path)
+    webroot = Path(cfg.host_webroot)
+    if not webroot.is_dir():
+        raise SystemExit(f"host web root not found: {webroot} (is the lab up?)")
     inject = SCENARIOS[scenario]
     log = MetricsLog(str(Path(cfg.incidents_csv).with_name("incidents_baseline.csv")))
     print(f"[exp] BASELINE arm: {trials} x {scenario} (NOTICE_DELAY={NOTICE_DELAY_SEC}s)")

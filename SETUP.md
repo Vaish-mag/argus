@@ -322,8 +322,22 @@ Finally, turn the numbers into charts:
 $ python lab/plot_results.py
 ```
 
-**✅ Verify:** `results/summary.txt` reports MTTD/MTTR/FPR and the **% MTTR reduction**,
-and `results/fig_*.png` are written — these go straight into your Results chapter. 🎉🎉
+**✅ Verify:** `results/summary.txt` reports MTTD, MTTR, **end-to-end recovery time**, and
+the reduction for each, plus `results/fig_*.png` — these go straight into your Results
+chapter. 🎉🎉
+
+> **Which number is the headline?** Quote **TotalRecovery (attack → healthy)**, not MTTR
+> alone. MTTR starts its clock at *detection*, so the manual arm's 30s operator-notice
+> delay lands in MTTD and cancels out of an MTTR-only comparison — making the two arms
+> look nearly identical even though closing that human gap is the entire point of the
+> controller. Report all three metrics and explain this; it shows you understood what you
+> measured.
+
+> **Long runs:** each incident `docker commit`s the compromised container for forensic
+> fidelity — about **1 GB of image per incident**, so 20 trials costs ~20 GB. Set
+> `commit_forensic_image: false` in [config/argus.yaml](config/argus.yaml) for long
+> measurement runs (the filesystem evidence capture still happens either way), and prune
+> old ones with `docker rmi $(docker images 'argus/forensic' -q)`.
 
 ---
 

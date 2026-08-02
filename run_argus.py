@@ -16,6 +16,7 @@ Examples:
 """
 import argparse
 import csv
+import shutil
 import sys
 from pathlib import Path
 
@@ -24,12 +25,21 @@ from argus.manifest import Manifest
 
 
 def cmd_init_golden(cfg: ArgusConfig, args) -> None:
-    root = Path(args.root or "runtime/webroot")
+    root = Path(args.root or cfg.host_webroot)
     if not root.exists():
         sys.exit(f"web root not found: {root} (start docker-compose first)")
     m = Manifest.build(root, source="golden", clean=True)
     m.save(cfg.golden_manifest)
     print(f"[argus] golden manifest written: {cfg.golden_manifest} ({len(m.files)} files)")
+
+    # Keep a pristine CONTENT copy too. The manifest alone is only hashes, so a restore
+    # would have nothing to lay down; writing both from the same source in one step is
+    # what guarantees the restored files verify against the manifest.
+    golden_root = Path(cfg.golden_webroot)
+    if golden_root.exists():
+        shutil.rmtree(golden_root, ignore_errors=True)
+    shutil.copytree(root, golden_root)
+    print(f"[argus] golden web root copied:  {golden_root}")
 
 
 def cmd_train(cfg: ArgusConfig, args) -> None:
@@ -48,7 +58,7 @@ def cmd_train(cfg: ArgusConfig, args) -> None:
 
 def cmd_watch(cfg: ArgusConfig, args) -> None:
     from argus.fim_watch import FIMWatcher
-    FIMWatcher(cfg, args.root, args.period).run()
+    FIMWatcher(cfg, args.root or cfg.host_webroot, args.period).run()
 
 
 def cmd_run(cfg: ArgusConfig, args) -> None:
@@ -79,7 +89,7 @@ def main() -> None:
     t.add_argument("--normal", required=True)
     t.add_argument("--contamination", type=float, default=0.02)
     w = sub.add_parser("watch")
-    w.add_argument("--root", default="runtime/webroot")
+    w.add_argument("--root", help="defaults to host_webroot from the config")
     w.add_argument("--period", type=float, default=2.0)
     r = sub.add_parser("run"); r.add_argument("--period", type=float, default=2.0)
 

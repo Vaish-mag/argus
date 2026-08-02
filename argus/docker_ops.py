@@ -31,9 +31,16 @@ class DockerOps:
         self.client = docker.from_env()
 
     # ---- lifecycle --------------------------------------------------------
-    def run(self, image: str, name: str, network: str, ports: Optional[dict] = None):
+    def run(self, image: str, name: str, network: str, ports: Optional[dict] = None,
+            volumes: Optional[dict] = None):
+        """
+        Launch a container. `volumes` matters for restores: the protected web root is a
+        bind mount, and a restored instance that silently dropped it would serve content
+        from the image while the host directory (what FIM actually watches) drifted apart.
+        """
         return self.client.containers.run(
-            image, name=name, detach=True, network=network, ports=ports or {}
+            image, name=name, detach=True, network=network, ports=ports or {},
+            volumes=volumes or {},
         )
 
     def stop_and_remove(self, name: str) -> None:
@@ -67,15 +74,60 @@ class DockerOps:
         net.connect(name)
 
     # ---- file transfer ----------------------------------------------------
-    def copy_out(self, name: str, container_path: str, host_dir: Path) -> Path:
-        """Copy a directory *out* of a container to the host (for snapshots/forensics)."""
+    @staticmethod
+    def _extract_stripped(stream, container_path: str, host_dir: Path) -> Path:
+        """
+        Extract a Docker `get_archive` tar into host_dir, stripping the leading directory
+        component Docker always adds (archiving /var/www/html yields members named
+        "html/...").
+
+        Stripping it is essential: snapshot manifests are keyed on paths relative to the
+        snapshot root, and if they came out as "html/index.php" while the golden manifest
+        holds "index.php", every file reads as new, every snapshot is marked unclean, and
+        the verified-clean restore path can never be selected. It also keeps copy_out
+        symmetric with copy_in, which expects host_dir to *be* the directory contents.
+        """
+        host_dir = Path(host_dir)
         host_dir.mkdir(parents=True, exist_ok=True)
-        c = self.client.containers.get(name)
-        stream, _ = c.get_archive(container_path)
+        top = Path(container_path.rstrip("/")).name
         raw = io.BytesIO(b"".join(stream))
         with tarfile.open(fileobj=raw) as tar:
-            tar.extractall(host_dir)
+            for member in tar.getmembers():
+                parts = Path(member.name).parts
+                if not parts or parts[0] != top or len(parts) == 1:
+                    continue                      # skip the wrapper dir entry itself
+                member.name = Path(*parts[1:]).as_posix()
+                try:
+                    tar.extract(member, host_dir, filter="data")
+                except TypeError:                 # Python < 3.12 has no filter kwarg
+                    tar.extract(member, host_dir)
+                except Exception:
+                    continue                      # forgiving: a single odd member (link,
+                                                  # device node) must not abort the capture
         return host_dir
+
+    def copy_out(self, name: str, container_path: str, host_dir: Path) -> Path:
+        """Copy a directory *out* of a container to the host (for snapshots/forensics)."""
+        c = self.client.containers.get(name)
+        stream, _ = c.get_archive(container_path)
+        return self._extract_stripped(stream, container_path, Path(host_dir))
+
+    def seed_from_image(self, image: str, container_path: str, host_dir: Path) -> Path:
+        """
+        Copy a path out of an *image* (via a throwaway container) without running it.
+
+        Used to rebuild the host web root from the known-good golden image when no
+        verified-clean snapshot is available.
+        """
+        c = self.client.containers.create(image, command="true")
+        try:
+            stream, _ = c.get_archive(container_path)
+            return self._extract_stripped(stream, container_path, Path(host_dir))
+        finally:
+            try:
+                c.remove(force=True)
+            except Exception:
+                pass
 
     def copy_in(self, name: str, host_dir: Path, container_parent: str) -> None:
         """Copy a directory *into* a container (restoring verified-clean files)."""

@@ -24,23 +24,38 @@ class ArgusConfig:
     protected_container: str = "argus-web"          # name/label of the "main" instance
     golden_image: str = "argus/dvwa-golden:latest"  # known-good baseline image
     protected_path: str = "/var/www/html"           # path *inside* the container to guard
+    host_webroot: str = "runtime/webroot"           # the HOST side of the bind mount
     isolated_network: str = "argus_protected"       # docker network the main sits on
     health_url: str = "http://localhost:8080/login.php"  # promotion health check
+    host_port: int = 8080                           # host port published by a restored main
 
     # --- snapshot / clone cadence -----------------------------------------
     snapshot_interval_sec: int = 900                 # 15 min (spec: 10-20 min)
     snapshots_dir: str = "results/snapshots"
     golden_manifest: str = "config/golden_manifest.json"
+    # pristine CONTENT copy of the golden web root, written by `init-golden` alongside the
+    # manifest. The manifest only stores hashes, so a restore needs real files that are
+    # guaranteed to match it -- both are produced from the same source in one step.
+    golden_webroot: str = "runtime/golden_webroot"
     keep_snapshots: int = 12                         # retain last N cycles
 
     # --- detection ---------------------------------------------------------
     wazuh_alerts_path: str = "runtime/wazuh_alerts.json"  # tailed alert stream
     breach_signal_path: str = "runtime/breach.flag"       # active-response drop file
+    # The experiment harness records the injection time here so the long-running daemon
+    # can attribute a detection to a known attack and therefore compute MTTD. Absent this
+    # marker a detection is (correctly) treated as a false positive.
+    attack_marker_path: str = "runtime/attack_marker.json"
     anomaly_threshold: float = -0.15                 # IsolationForest score cutoff
     anomaly_model_path: str = "results/anomaly_model.joblib"
 
     # --- healing / forensics ----------------------------------------------
     forensics_dir: str = "results/forensics"
+    # `docker commit` of the compromised container freezes its full filesystem state --
+    # maximum evidence fidelity, but ~1 GB of image per incident, so a 20-trial run costs
+    # ~20 GB. The filesystem capture of the protected path happens either way; turn this
+    # off for long measurement runs and note the trade-off in your write-up.
+    commit_forensic_image: bool = True
     health_retries: int = 10
     health_retry_delay_sec: float = 2.0
 
