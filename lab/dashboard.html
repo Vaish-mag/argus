@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Argus — live</title>
+<style>
+  :root{
+    --bg:#0f1419; --card:#161c24; --line:#2a3441; --txt:#e6edf3; --dim:#8b98a5;
+    --ok:#3fb950; --bad:#f85149; --warn:#d29922; --acc:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.55 ui-monospace,"Cascadia Code",Consolas,Menlo,monospace}
+  header{padding:14px 22px;border-bottom:1px solid var(--line);
+         display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  h1{font-size:17px;margin:0;letter-spacing:2px}
+  .sub{color:var(--dim);font-size:12px}
+  .pill{padding:2px 11px;border-radius:20px;font-size:12px;border:1px solid var(--line)}
+  .ok{color:var(--ok);border-color:var(--ok)}
+  .bad{color:var(--bad);border-color:var(--bad)}
+  .warn{color:var(--warn);border-color:var(--warn)}
+  main{padding:20px;display:grid;gap:16px;
+       grid-template-columns:repeat(auto-fit,minmax(320px,1fr));max-width:1500px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:15px 17px}
+  .card h2{font-size:11px;text-transform:uppercase;letter-spacing:1.3px;
+           color:var(--dim);margin:0 0 11px;font-weight:600}
+  .big{font-size:30px;font-weight:600;line-height:1.1}
+  .row{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
+  .k{color:var(--dim)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;color:var(--dim);font-weight:500;padding:5px 7px;
+     border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:5px 7px;border-bottom:1px solid #1f2630;white-space:nowrap}
+  .wide{grid-column:1/-1}
+  .scroll{overflow-x:auto}
+  code{color:var(--acc)}
+  .flash{animation:fl 1.6s ease-out}
+  @keyframes fl{from{background:rgba(63,185,80,.28)}to{background:transparent}}
+  .steps{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .step{font-size:11px;padding:3px 9px;border:1px solid var(--line);
+        border-radius:5px;color:var(--dim)}
+  .step.on{color:var(--bad);border-color:var(--bad)}
+  .dev{color:var(--bad);font-size:12px;white-space:nowrap;overflow:hidden;
+       text-overflow:ellipsis}
+  .empty{color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <h1>ARGUS</h1>
+  <span class="sub">self-healing moving-target defence — live</span>
+  <span id="live" class="pill">connecting…</span>
+  <span class="sub" style="margin-left:auto">updated <span id="ts">—</span></span>
+</header>
+
+<main>
+  <div class="card">
+    <h2>Protected service</h2>
+    <div class="row"><span class="k">container</span><code id="cid">—</code></div>
+    <div class="row"><span class="k">image</span><span id="cimg">—</span></div>
+    <div class="row"><span class="k">uptime</span><span id="cstatus">—</span></div>
+    <div class="row"><span class="k">health</span><span id="health" class="pill">—</span></div>
+    <div class="sub" style="margin-top:8px">
+      a new container id means the compromised instance was destroyed and replaced
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Trusted baseline</h2>
+    <div class="big" id="golden">—</div>
+    <div class="sub">files fingerprinted with SHA-256</div>
+    <div class="sub" style="margin-top:8px">clone cycle every
+      <span id="interval">—</span>s</div>
+  </div>
+
+  <div class="card">
+    <h2>Integrity of live web root</h2>
+    <div class="big" id="drift">—</div>
+    <div class="sub" id="driftLabel">—</div>
+    <div id="driftList" style="margin-top:9px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Breach signal</h2>
+    <div class="big" id="breach">—</div>
+    <div class="sub" id="breachDetail" style="word-break:break-all"></div>
+    <div class="steps" id="steps"></div>
+    <div class="row" style="margin-top:9px">
+      <span class="k">forensic cases preserved</span><span id="cases">0</span>
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>Clone cycle — hash-verified copies</h2>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>clone</th><th>files</th><th>verified clean</th>
+        <th>eligible as restore source</th></tr></thead>
+      <tbody id="clones"><tr><td colspan="4" class="empty">none taken yet</td></tr></tbody>
+    </table>
+    </div>
+    <div class="sub" style="margin-top:8px">
+      a clone that deviates from the baseline is kept for forensics but refused as a
+      restore source — this is what stops a poisoned clone being promoted
+    </div>
+  </div>
+
+  <div class="card wide">
+    <h2>Incidents — detected and healed</h2>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>incident</th><th>scenario</th><th>detected by</th>
+        <th>MTTD (s)</th><th>MTTR (s)</th><th>attack→healthy (s)</th>
+        <th>restored from</th></tr></thead>
+      <tbody id="incidents"><tr><td colspan="7" class="empty">no incidents yet</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+</main>
+
+<script>
+/* The page is deliberately dumb: it renders whatever results/status.json and
+   results/incidents.csv currently say. All observation happens in lab/serve.py,
+   because a browser cannot run `docker ps` or hash the protected directory. */
+
+const $ = id => document.getElementById(id);
+let lastIncidentId = null;
+let seenFirstPoll = false;
+
+/* incidents.csv is small and well-formed (written by csv.DictWriter), so a
+   minimal split-based parser is sufficient and avoids pulling in a library. */
+function parseCsv(text){
+  const lines = text.trim().split(/\r?\n/);
+  if(lines.length < 2) return [];
+  const head = lines[0].split(',');
+  return lines.slice(1).map(l => {
+    const cells = l.split(',');
+    return Object.fromEntries(head.map((h,i) => [h, (cells[i] ?? '').trim()]));
+  });
+}
+
+function setLive(ok, label){
+  $('live').textContent = label;
+  $('live').className = 'pill ' + (ok ? 'ok' : 'bad');
+}
+
+function renderStatus(s){
+  $('ts').textContent = new Date(s.generated_at*1000).toLocaleTimeString();
+
+  $('cid').textContent     = s.container.id || '—';
+  $('cimg').textContent    = s.container.image || '—';
+  $('cstatus').textContent = s.container.status;
+
+  const healthy = ['200','302'].includes(s.health);
+  $('health').textContent = s.health;
+  $('health').className   = 'pill ' + (healthy ? 'ok' : 'bad');
+
+  $('golden').textContent   = s.golden_files || '—';
+  $('interval').textContent = s.snapshot_interval_sec;
+
+  const n = s.drift.count;
+  $('drift').textContent    = n;
+  $('drift').style.color    = n ? 'var(--bad)' : 'var(--ok)';
+  $('driftLabel').textContent = n
+    ? 'deviations from baseline — TAMPERING DETECTED'
+    : 'matches the trusted baseline exactly';
+  $('driftList').innerHTML = s.drift.items
+    .map(d => `<div class="dev">${d}</div>`).join('');
+
+  $('breach').textContent      = s.breach ? 'RAISED' : 'clear';
+  $('breach').style.color      = s.breach ? 'var(--bad)' : 'var(--ok)';
+  $('breachDetail').textContent = s.breach_detail;
+  $('cases').textContent        = s.forensic_cases;
+
+  /* highlight the heal sequence while a breach is being acted on */
+  const steps = ['forensics','isolate','destroy','restore','verify','health','promote'];
+  $('steps').innerHTML = steps
+    .map(t => `<span class="step${s.breach ? ' on' : ''}">${t}</span>`).join('');
+
+  $('clones').innerHTML = s.clones.length ? s.clones.map(c => `
+    <tr>
+      <td>${c.name}</td>
+      <td>${c.files}</td>
+      <td style="color:${c.clean ? 'var(--ok)' : 'var(--bad)'}">
+        ${c.clean ? 'yes' : 'no — deviates from baseline'}</td>
+      <td class="${c.clean ? '' : 'empty'}">${c.clean ? 'yes' : 'never promoted'}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">none taken yet</td></tr>';
+}
+
+function renderIncidents(rows){
+  const recent = rows.slice().reverse().slice(0,12);
+  $('incidents').innerHTML = recent.length ? recent.map(r => `
+    <tr>
+      <td>${r.incident_id}</td>
+      <td>${r.scenario || '—'}</td>
+      <td>${r.detected_by || '—'}${r.false_positive === 'True'
+            ? ' <span class="warn">(no attack marker)</span>' : ''}</td>
+      <td>${r.mttd || '—'}</td>
+      <td>${r.mttr || '—'}</td>
+      <td>${r.total_recovery || '—'}</td>
+      <td><code>${r.restore_source || '—'}</code></td>
+    </tr>`).join('')
+    : '<tr><td colspan="7" class="empty">no incidents yet</td></tr>';
+
+  const newest = recent[0]?.incident_id ?? null;
+  if(newest && newest !== lastIncidentId){
+    if(seenFirstPoll) $('incidents').firstElementChild?.classList.add('flash');
+    lastIncidentId = newest;
+  }
+}
+
+async function tick(){
+  try{
+    const s = await (await fetch('../results/status.json?_=' + Date.now())).json();
+    renderStatus(s);
+    setLive(true, 'live');
+  }catch(e){
+    setLive(false, 'no data — is lab/serve.py running?');
+  }
+  try{
+    const t = await (await fetch('../results/incidents.csv?_=' + Date.now())).text();
+    renderIncidents(parseCsv(t));
+  }catch(e){ /* no incidents recorded yet — leave the placeholder in place */ }
+  seenFirstPoll = true;
+}
+
+tick();
+setInterval(tick, 1500);
+</script>
+</body>
+</html>

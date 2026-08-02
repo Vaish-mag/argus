@@ -27,16 +27,34 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 
-def _load_metric(path: Path, col: str = "mttr") -> list[float]:
+def _load_metric(path: Path, col: str = "mttr", trials_only: bool = True) -> list[float]:
+    """
+    Read one timing column.
+
+    `trials_only` drops unattributed detections (no attack marker, so recorded as false
+    positives). Those are real heals, but they are not trials: including their durations
+    in the timing distributions mixes two different populations and makes this script
+    disagree with any other view of the same data. They are counted separately and
+    reported as a false-positive line instead.
+    """
     if not path.exists():
         return []
     out = []
     with open(path, newline="") as fh:
         for r in csv.DictReader(fh):
+            if trials_only and r.get("false_positive") == "True":
+                continue
             v = r.get(col)
             if v not in ("", "None", None):
                 out.append(float(v))
     return out
+
+
+def _count_unattributed(path: Path) -> int:
+    if not path.exists():
+        return 0
+    with open(path, newline="") as fh:
+        return sum(1 for r in csv.DictReader(fh) if r.get("false_positive") == "True")
 
 
 def _load_col(path: Path, col: str) -> list[str]:
@@ -127,6 +145,31 @@ def main() -> None:
         if base_mttd:
             lines.append(f"Baseline MTTD: n={len(base_mttd)} "
                          f"mean={statistics.mean(base_mttd):.2f}s (modelled notice delay)")
+
+    # Detections with no attack marker: real heals, but not trials. Excluded from the
+    # timing distributions above and reported here so the exclusion is visible.
+    unattributed = _count_unattributed(argus_csv)
+    if unattributed:
+        lines.append("")
+        lines.append(f"Unattributed detections (excluded from the timings above): "
+                     f"{unattributed}")
+        lines.append("  These fired with no injected attack -- discuss them as false")
+        lines.append("  positives, not as recovery measurements.")
+
+    # A baseline trial whose health check never passed records no MTTR and silently
+    # drops out of the comparison. Since those are the SLOWEST recoveries, dropping them
+    # flatters the manual arm and understates the controller's advantage -- so say so.
+    base_total_rows = 0
+    if base_csv.exists():
+        with open(base_csv, newline="") as fh:
+            base_total_rows = sum(1 for _ in csv.DictReader(fh))
+    if base_total_rows and len(base_mttr) < base_total_rows:
+        lines.append("")
+        lines.append(f"!! Baseline: only {len(base_mttr)} of {base_total_rows} trials "
+                     f"recovered healthily.")
+        lines.append("   The rest never passed their health check and are excluded. Those")
+        lines.append("   are the slowest recoveries, so this UNDERSTATES the improvement.")
+        lines.append("   Raise health_retries in config/argus.yaml and re-run the arm.")
 
     (results / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))

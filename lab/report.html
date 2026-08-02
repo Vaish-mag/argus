@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Argus — results report</title>
+<style>
+  :root{
+    --bg:#ffffff; --txt:#1a1f26; --dim:#5b6672; --line:#dfe4ea;
+    --accent:#0b62c4; --ok:#1a7f37; --bad:#b3261e; --soft:#f5f7fa;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#0f1419;--txt:#e6edf3;--dim:#8b98a5;--line:#2a3441;
+          --accent:#58a6ff;--ok:#3fb950;--bad:#f85149;--soft:#161c24}
+  }
+  *{box-sizing:border-box}
+  body{margin:0 auto;max-width:900px;padding:40px 24px 80px;background:var(--bg);
+       color:var(--txt);font:16px/1.65 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  h1{font-size:28px;margin:0 0 4px;letter-spacing:-.3px}
+  .lede{color:var(--dim);margin:0 0 28px}
+  h2{font-size:19px;margin:38px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+  h3{font-size:15px;margin:22px 0 8px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+  th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--line);
+     font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+  td{padding:8px 10px;border-bottom:1px solid var(--line)}
+  tbody tr:nth-child(even){background:var(--soft)}
+  code{background:var(--soft);padding:1px 5px;border-radius:4px;font-size:13.5px}
+  .cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+         margin:18px 0}
+  .card{border:1px solid var(--line);border-radius:9px;padding:15px 17px;background:var(--soft)}
+  .card .lab{font-size:11.5px;text-transform:uppercase;letter-spacing:.9px;color:var(--dim)}
+  .card .val{font-size:27px;font-weight:650;margin-top:3px;line-height:1.15}
+  .card .note{font-size:12.5px;color:var(--dim);margin-top:3px}
+  .good{color:var(--ok)} .warnc{color:var(--bad)}
+  figure{margin:20px 0}
+  img{max-width:100%;border:1px solid var(--line);border-radius:8px;display:block}
+  figcaption{font-size:13px;color:var(--dim);margin-top:7px}
+  .callout{border-left:3px solid var(--accent);background:var(--soft);
+           padding:12px 16px;margin:18px 0;border-radius:0 7px 7px 0}
+  .callout.warn{border-left-color:var(--bad)}
+  .scroll{overflow-x:auto}
+  .flow{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:14px 0}
+  .flow span{border:1px solid var(--line);border-radius:6px;padding:5px 11px;font-size:13px;
+             background:var(--soft)}
+  .flow i{color:var(--dim);font-style:normal}
+  button{font:inherit;padding:8px 16px;border:1px solid var(--line);border-radius:7px;
+         background:var(--soft);color:var(--txt);cursor:pointer}
+  .err{color:var(--bad)}
+  @media print{
+    body{max-width:none;padding:0;font-size:12pt}
+    button{display:none}
+    h2{page-break-after:avoid} figure,table{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<h1>Argus — self-healing moving-target defence</h1>
+<p class="lede">Experimental results: detection and recovery from web-root compromise,
+measured against a scripted manual recovery.</p>
+<button onclick="window.print()">Print / save as PDF</button>
+
+<h2>What was measured</h2>
+<p>A containerised web application (DVWA) is monitored by an autonomic controller
+structured as a MAPE-K loop. On confirmed tampering it preserves forensic evidence,
+isolates and destroys the compromised container, rebuilds from a hash-verified clean
+source, and promotes the replacement — with no human involved.</p>
+
+<div class="flow">
+  <span>attack</span><i>→</i><span>detect</span><i>→</i><span>preserve evidence</span>
+  <i>→</i><span>isolate</span><i>→</i><span>destroy</span><i>→</i><span>restore</span>
+  <i>→</i><span>verify hashes</span><i>→</i><span>health check</span><i>→</i><span>promote</span>
+</div>
+
+<div class="callout">
+  <strong>Metric definitions.</strong>
+  <code>MTTD</code> = attack → detection.
+  <code>MTTR</code> = detection → service promoted.
+  <code>Total recovery</code> = attack → service healthy again.
+  MTTR starts its clock at detection, so the manual arm's operator-notice delay lands in
+  MTTD and cancels out of an MTTR-only comparison. <strong>Total recovery is the fair
+  arm-to-arm comparison</strong> and is the figure to quote.
+</div>
+
+<h2>Headline result</h2>
+<div class="cards" id="headline">
+  <div class="card"><div class="lab">loading…</div></div>
+</div>
+<div id="summaryBlock"></div>
+
+<h2>Detection and recovery</h2>
+<div class="scroll"><table id="statsTable">
+  <thead><tr><th>Metric</th><th>Argus (median)</th><th>Manual baseline (median)</th>
+    <th>Difference</th></tr></thead>
+  <tbody><tr><td colspan="4">loading…</td></tr></tbody>
+</table></div>
+
+<div class="callout warn" id="mttrNote" hidden>
+  <strong>On MTTR being no better than manual.</strong> The controller does strictly more
+  work per recovery: forensic capture, network isolation, SHA-256 verification of every
+  restored file, and a health gate before promotion. The scripted manual recovery only
+  stops the container, copies files back and restarts it. The advantage is in
+  <em>detection</em>, and in the evidence preservation the manual process never performs.
+</div>
+
+<h2>Figures</h2>
+<figure><img id="figTotal" alt="End-to-end recovery time comparison">
+  <figcaption>End-to-end recovery (attack → healthy). Includes the operator-notice delay
+  that the controller removes.</figcaption></figure>
+<figure><img id="figMttr" alt="MTTR comparison">
+  <figcaption>Mean-time-to-recover, measured from detection onward.</figcaption></figure>
+<figure><img id="figMttd" alt="MTTD distribution">
+  <figcaption>Detection-latency distribution for the controller.</figcaption></figure>
+<figure><img id="figSrc" alt="Detections by evidence source">
+  <figcaption>Detections by evidence source (signature / anomaly / both).</figcaption></figure>
+
+<h2>Trial log</h2>
+<div class="scroll"><table id="trials">
+  <thead><tr><th>Incident</th><th>Scenario</th><th>Detected by</th><th>MTTD</th>
+    <th>MTTR</th><th>Total</th><th>Restored from</th></tr></thead>
+  <tbody><tr><td colspan="7">loading…</td></tr></tbody>
+</table></div>
+
+<h2>Threats to validity</h2>
+<ul id="threats">
+  <li><strong>The attack is a filesystem observable, not a working exploit.</strong> The
+  harness writes an inert PHP marker reproducing the trace a webshell upload leaves. The
+  detection layer is file-integrity monitoring, so the two are equivalent from the
+  detector's point of view — but this is not exploit fidelity.</li>
+  <li><strong>The baseline's notice delay is modelled, not observed.</strong> A fixed
+  operator-notice delay stands in for human mean-time-to-acknowledge, and it drives the
+  entire comparison. It requires justification against a cited industry figure.</li>
+  <li><strong>DVWA is deliberately vulnerable</strong> and unrepresentative of a hardened
+  production target. The healing loop is application-agnostic, so this affects the realism
+  of the breach, not the validity of the recovery measurements.</li>
+  <li><strong>Single-host lab.</strong> Network isolation is logical rather than physical;
+  a production deployment would span hosts.</li>
+  <li id="outlierThreat" hidden><strong>Measurement outliers present.</strong> One or more
+  trials show durations far above the median, caused by the virtual machine stalling under
+  memory pressure while wall-clock time continued. Medians are reported for this reason;
+  means are distorted.</li>
+  <li id="smallN" hidden><strong>Small sample.</strong> Trial counts are low; these figures
+  demonstrate that the pipeline works rather than providing publication-grade statistics.</li>
+</ul>
+
+<h2>Reproducing this</h2>
+<p>From the project root, inside the virtual environment:</p>
+<pre><code>python run_argus.py init-golden
+python run_argus.py watch      # terminal 1
+python run_argus.py run        # terminal 2
+python lab/attacker/run_experiment.py --arm argus    --trials 20 --scenario webshell
+python lab/attacker/run_experiment.py --arm baseline --trials 20 --scenario webshell
+python lab/plot_results.py</code></pre>
+
+<p class="lede" style="margin-top:34px;font-size:13px" id="stamp"></p>
+
+<script>
+/* Reads the same result files the analysis script writes, so the page can never
+   disagree with results/summary.txt. */
+
+const $ = id => document.getElementById(id);
+const R = '../results/';
+
+function parseCsv(text){
+  const lines = text.trim().split(/\r?\n/);
+  if(lines.length < 2) return [];
+  const head = lines[0].split(',');
+  return lines.slice(1).map(l => {
+    const c = l.split(',');
+    return Object.fromEntries(head.map((h,i) => [h, (c[i] ?? '').trim()]));
+  });
+}
+const nums = (rows,col) => rows
+  .map(r => parseFloat(r[col]))
+  .filter(v => Number.isFinite(v));
+
+function median(a){
+  if(!a.length) return null;
+  const s = [...a].sort((x,y) => x-y), m = s.length>>1;
+  return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+}
+const fmt = v => v === null ? '—' : v.toFixed(2) + 's';
+
+function pct(base, argus){
+  if(base === null || argus === null || !base) return '—';
+  const d = 100*(base-argus)/base;
+  const sign = d >= 0 ? '−' : '+';           /* reduction shown as a negative delta */
+  return `${sign}${Math.abs(d).toFixed(1)}%`;
+}
+
+async function text(path){
+  const r = await fetch(path + '?_=' + Date.now());
+  if(!r.ok) throw new Error(path);
+  return r.text();
+}
+
+async function main(){
+  let argus = [], base = [];
+  try{ argus = parseCsv(await text(R+'incidents.csv')); }
+  catch(e){
+    $('headline').innerHTML =
+      '<div class="card"><div class="lab err">no results found</div>' +
+      '<div class="note">Run the experiment first, then reload.</div></div>';
+    return;
+  }
+  try{ base = parseCsv(await text(R+'incidents_baseline.csv')); }catch(e){}
+
+  /* trials only: rows with no attack marker are unattributed detections, which
+     belong in the false-positive discussion rather than the timing distributions */
+  const trials = argus.filter(r => r.false_positive !== 'True');
+  const fpCount = argus.length - trials.length;
+
+  const aTotal = median(nums(trials,'total_recovery'));
+  const bTotal = median(nums(base,'total_recovery'));
+  const aMttr  = median(nums(trials,'mttr'));
+  const bMttr  = median(nums(base,'mttr'));
+  const aMttd  = median(nums(trials,'mttd'));
+  const bMttd  = median(nums(base,'mttd'));
+
+  $('headline').innerHTML = `
+    <div class="card"><div class="lab">End-to-end recovery</div>
+      <div class="val ${bTotal && aTotal < bTotal ? 'good':''}">${pct(bTotal,aTotal)}</div>
+      <div class="note">${fmt(aTotal)} vs ${fmt(bTotal)} manual</div></div>
+    <div class="card"><div class="lab">Detection (MTTD)</div>
+      <div class="val ${bMttd && aMttd < bMttd ? 'good':''}">${fmt(aMttd)}</div>
+      <div class="note">vs ${fmt(bMttd)} manual</div></div>
+    <div class="card"><div class="lab">Repair (MTTR)</div>
+      <div class="val">${fmt(aMttr)}</div>
+      <div class="note">vs ${fmt(bMttr)} manual</div></div>
+    <div class="card"><div class="lab">Trials</div>
+      <div class="val">${trials.length} / ${base.length}</div>
+      <div class="note">argus / baseline${fpCount ? ` · ${fpCount} unattributed` : ''}</div></div>`;
+
+  $('statsTable').querySelector('tbody').innerHTML = `
+    <tr><td><strong>Total recovery</strong> (attack → healthy)</td>
+        <td>${fmt(aTotal)}</td><td>${fmt(bTotal)}</td><td>${pct(bTotal,aTotal)}</td></tr>
+    <tr><td>MTTD (attack → detected)</td>
+        <td>${fmt(aMttd)}</td><td>${fmt(bMttd)}</td><td>${pct(bMttd,aMttd)}</td></tr>
+    <tr><td>MTTR (detected → promoted)</td>
+        <td>${fmt(aMttr)}</td><td>${fmt(bMttr)}</td><td>${pct(bMttr,aMttr)}</td></tr>`;
+
+  if(aMttr !== null && bMttr !== null && aMttr > bMttr) $('mttrNote').hidden = false;
+  if(trials.length < 20 || base.length < 20) $('smallN').hidden = false;
+
+  const all = nums(trials,'total_recovery');
+  const med = median(all);
+  if(med && all.some(v => v > 10*med)) $('outlierThreat').hidden = false;
+
+  $('trials').querySelector('tbody').innerHTML = trials.map(r => `
+    <tr><td>${r.incident_id}</td><td>${r.scenario||'—'}</td><td>${r.detected_by||'—'}</td>
+        <td>${r.mttd||'—'}</td><td>${r.mttr||'—'}</td><td>${r.total_recovery||'—'}</td>
+        <td><code>${r.restore_source||'—'}</code></td></tr>`).join('')
+    || '<tr><td colspan="7">no trials recorded</td></tr>';
+
+  /* hide figures that were never generated */
+  const figs = {figTotal:'fig_total_recovery.png', figMttr:'fig_mttr_comparison.png',
+                figMttd:'fig_mttd_hist.png',       figSrc:'fig_detection_source.png'};
+  for(const [id,file] of Object.entries(figs)){
+    const el = $(id);
+    el.src = R + file;
+    el.onerror = () => el.closest('figure').remove();
+  }
+
+  try{
+    const s = await text(R+'summary.txt');
+    $('summaryBlock').innerHTML =
+      '<h3>Raw output from <code>plot_results.py</code></h3><pre><code>' +
+      s.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</code></pre>';
+  }catch(e){}
+
+  $('stamp').textContent = 'Generated from results/ on ' + new Date().toLocaleString();
+}
+main();
+</script>
+</body>
+</html>

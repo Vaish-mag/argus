@@ -36,7 +36,10 @@ forensics_dir: "results/forensics"
 # image per incident, so set false for long measurement runs (the filesystem capture of
 # the protected path still happens either way).
 commit_forensic_image: true
-health_retries: 10
+# 25 x 2s = 50s. DVWA needs ~15-20s to bring up MySQL and Apache, and a cold start is
+# slower still, so the previous 10 x 2s = 20s budget expired on the first few restarts of
+# a run. Those trials recorded no MTTR and dropped out of the results silently.
+health_retries: 25
 health_retry_delay_sec: 2.0
 
 # --- metrics ---------------------------------------------------------------
