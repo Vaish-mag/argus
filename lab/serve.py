@@ -23,14 +23,14 @@ then open   http://localhost:8090/lab/dashboard.html
 from __future__ import annotations
 
 import json
+import mimetypes
 import subprocess
 import sys
 import threading
 import time
 import urllib.error
 import urllib.request
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +41,21 @@ from argus.manifest import Manifest       # noqa: E402
 
 PORT = 8090
 REFRESH_SEC = 2.0
+
+# Explicit allow-list. This process previously served the whole project directory tree,
+# which meant .git/ (full source history) and results/forensics/*/captured/ -- a verbatim
+# copy of DVWA's web root, including config/config.inc.php and its database password --
+# were reachable to anything on the same network with no authentication. Only these exact
+# relative paths, plus the incidents CSVs and PNGs matched below, are ever served.
+ALLOWED_FILES = {
+    "lab/dashboard.html",
+    "lab/report.html",
+    "results/status.json",
+    "results/incidents.csv",
+    "results/incidents_baseline.csv",
+    "results/summary.txt",
+}
+ALLOWED_PNG_DIR = ROOT / "results"
 
 
 def _container(cfg: ArgusConfig) -> dict:
@@ -130,10 +145,38 @@ def writer_loop() -> None:
         time.sleep(REFRESH_SEC)
 
 
-class Handler(SimpleHTTPRequestHandler):
-    def end_headers(self):
+class Handler(BaseHTTPRequestHandler):
+    def _resolve(self) -> Path | None:
+        """
+        Map a request path to a real file, or None if it is not on the allow-list.
+
+        Rejects the request outright rather than trying to sanitise the input: no `..`
+        handling, no directory listing, no fallback to serving anything not named here.
+        """
+        rel = self.path.split("?", 1)[0].lstrip("/")
+        if rel in ALLOWED_FILES:
+            return ROOT / rel
+        if rel.startswith("results/fig_") and rel.endswith(".png"):
+            candidate = (ROOT / rel).resolve()
+            if candidate.parent == ALLOWED_PNG_DIR.resolve() and candidate.is_file():
+                return candidate
+        return None
+
+    def do_GET(self):                                             # noqa: N802
+        path = self._resolve()
+        if path is None or not path.is_file():
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        body = path.read_bytes()
+        ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")   # always show live data
-        super().end_headers()
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, *a):
         pass
@@ -143,9 +186,9 @@ if __name__ == "__main__":
     threading.Thread(target=writer_loop, daemon=True).start()
     print(f"[serve] dashboard : http://localhost:{PORT}/lab/dashboard.html")
     print(f"[serve] report    : http://localhost:{PORT}/lab/report.html")
+    print("[serve] bound to 127.0.0.1 only -- not reachable from your network")
     print("[serve] Ctrl-C to stop")
     try:
-        ThreadingHTTPServer(("0.0.0.0", PORT),
-                            partial(Handler, directory=str(ROOT))).serve_forever()
+        ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
     except KeyboardInterrupt:
         print("\n[serve] stopped")
