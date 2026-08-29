@@ -35,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # project root on path
 
 from argus.config import ArgusConfig            # noqa: E402
-from argus.metrics import MetricsLog            # noqa: E402
+from argus.storage import MetricsLog            # noqa: E402
 from lab.attacker.attack_lib import SCENARIOS   # noqa: E402
 
 
