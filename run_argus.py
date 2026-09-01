@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 from argus.config import ArgusConfig
-from argus.manifest import Manifest
+from argus.storage import Manifest
 
 
 def cmd_init_golden(cfg: ArgusConfig, args) -> None:
@@ -43,7 +43,7 @@ def cmd_init_golden(cfg: ArgusConfig, args) -> None:
 
 
 def cmd_train(cfg: ArgusConfig, args) -> None:
-    from argus.anomaly import AnomalyDetector, Window
+    from argus.detection import AnomalyDetector, Window
     rows = []
     with open(args.normal, newline="") as fh:
         for r in csv.reader(fh):
@@ -57,15 +57,14 @@ def cmd_train(cfg: ArgusConfig, args) -> None:
 
 
 def cmd_watch(cfg: ArgusConfig, args) -> None:
-    from argus.fim_watch import FIMWatcher
+    from argus.detection import FIMWatcher
     FIMWatcher(cfg, args.root or cfg.host_webroot, args.period).run()
 
 
 def cmd_run(cfg: ArgusConfig, args) -> None:
     from argus.controller import ArgusController
     from argus.docker_ops import DockerOps
-    from argus.sensors import HostSensor
-    from argus.anomaly import AnomalyDetector
+    from argus.detection import AnomalyDetector, HostSensor
 
     anomaly = None
     if Path(cfg.anomaly_model_path).exists():

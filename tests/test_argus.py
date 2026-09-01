@@ -17,10 +17,8 @@ from pathlib import Path
 import pytest
 
 from argus.config import ArgusConfig
-from argus.healer import Healer
-from argus.manifest import Manifest, sha256_file
-from argus.metrics import Incident, MetricsLog
-from argus.controller import ArgusController
+from argus.controller import ArgusController, Healer
+from argus.storage import Incident, Manifest, MetricsLog, sha256_file
 
 
 # ----------------------------------------------------------------------------
@@ -55,7 +53,7 @@ def test_manifest_build_survives_file_vanishing_mid_scan(tmp_path, monkeypatch):
     Manifest.build used to raise FileNotFoundError, which killed the watcher process --
     after which nothing detected anything and every later trial timed out.
     """
-    import argus.manifest as manifest_mod
+    import argus.storage as manifest_mod
 
     root = tmp_path / "web"
     root.mkdir()
@@ -108,7 +106,7 @@ def test_manifest_save_load(tmp_path):
 # fim_watch (the lightweight Wazuh-free detection fallback)
 # ----------------------------------------------------------------------------
 def test_fim_watcher_detects_deviation(tmp_path):
-    from argus.fim_watch import FIMWatcher
+    from argus.detection import FIMWatcher
 
     golden_root = tmp_path / "golden"
     golden_root.mkdir()
@@ -132,7 +130,7 @@ def test_fim_watcher_detects_deviation(tmp_path):
 
 
 def test_fim_watcher_ignores_volatile_paths(tmp_path):
-    from argus.fim_watch import FIMWatcher
+    from argus.detection import FIMWatcher
 
     golden_root = tmp_path / "golden"
     golden_root.mkdir()
@@ -204,7 +202,7 @@ def test_total_recovery_exposes_notice_delay_hidden_by_mttr():
 # ----------------------------------------------------------------------------
 def test_anomaly_flags_outlier():
     sk = pytest.importorskip("sklearn")
-    from argus.anomaly import AnomalyDetector, Window
+    from argus.detection import AnomalyDetector, Window
     import random
     random.seed(0)
     # normal windows: low change/process counts, modest traffic
@@ -374,7 +372,7 @@ def test_heal_leaves_no_residual_breach_signal(tmp_path):
     very next poll and the controller heals forever. We assert the post-heal web root
     verifies clean against golden, which is exactly what the watcher checks.
     """
-    from argus.fim_watch import FIMWatcher
+    from argus.detection import FIMWatcher
 
     ws = tmp_path
     (ws / "config").mkdir()

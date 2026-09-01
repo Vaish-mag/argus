@@ -37,7 +37,7 @@ import time
 from pathlib import Path
 
 from argus.config import ArgusConfig
-from argus.metrics import Incident, MetricsLog
+from argus.storage import Incident, MetricsLog
 from lab.attacker.attack_lib import SCENARIOS
 
 NOTICE_DELAY_SEC = 30.0     # placeholder: replace with a cited MTTA figure and justify it

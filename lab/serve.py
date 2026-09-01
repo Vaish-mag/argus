@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from argus.config import ArgusConfig      # noqa: E402
-from argus.manifest import Manifest       # noqa: E402
+from argus.storage import Manifest        # noqa: E402
 
 PORT = 8090
 REFRESH_SEC = 2.0
