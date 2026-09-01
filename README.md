@@ -83,14 +83,19 @@ argus/
 
 ## Quick start (after completing `SETUP.md`)
 
-```bash
-# 0. from the project root, inside your WSL2 venv
-source .venv/bin/activate
+Every terminal you open for this project starts with the same line — it moves you into
+the project root *and* activates the virtual environment. Skipping the `cd` is the most
+common cause of `.venv/bin/activate: No such file or directory`.
 
-# 1. bring up the lab target
+```bash
+# 0. every new terminal starts here
+cd ~/argus && source .venv/bin/activate
+
+# 1. bring up the lab target (see SETUP.md Step 5 if the web root needs seeding first)
 docker compose up -d web
 
-# 2. tag the golden baseline image, then build the golden manifest from the pristine web root
+# 2. tag the golden baseline image, then build the golden manifest + a pristine content
+#    copy from the current (clean!) web root — both are written by this one command
 docker tag vulnerables/web-dvwa:latest argus/dvwa-golden:latest
 python run_argus.py init-golden
 
@@ -100,26 +105,39 @@ python run_argus.py watch
 # 4. (optional) train the anomaly model from a normal-traffic capture
 python run_argus.py train --normal results/normal_windows.csv
 
-# 5. in another terminal: start the self-healing controller (leave running)
+# 5. in another terminal (repeat step 0 first): start the self-healing controller (leave running)
 python run_argus.py run
 
-# 6. in a third terminal: run the experiment
+# 6. in a third terminal (repeat step 0 first): watch it work, live
+python lab/serve.py
+#    then open http://localhost:8090/lab/dashboard.html in a browser
+
+# 7. run a single narrated attack -> detect -> heal cycle (needs steps 3 and 5 running)
+bash lab/demo.sh
+
+# 8. or run the full measured experiment instead of/after the demo
 python lab/attacker/run_experiment.py --arm argus    --trials 20 --scenario webshell
 python lab/attacker/run_experiment.py --arm baseline --trials 20 --scenario webshell
-
-# 7. generate the Results-chapter figures
 python lab/plot_results.py
+#    then open http://localhost:8090/lab/report.html for the presentable results
 ```
+
+See [docs/RUNNING-LOCALLY.md](docs/RUNNING-LOCALLY.md) for the same steps in full detail,
+lettered A.1–I.4, including which terminal each command goes in and how to recover from
+the failures that actually happen (a stale container name after a heal, an unseeded web
+root, WSL running out of memory).
 
 ## Tests
 
 ```bash
-python -m pytest -q      # 8 tests incl. a full detect→heal integration test (no daemon needed)
+python -m pytest -q      # 14 tests incl. a full detect→heal integration test (no daemon needed)
 ```
 
-Eight tests should pass, including a full detect-and-repair run and the FIM-watcher unit
-tests — all work without any of the heavy infrastructure (Docker/Wazuh), handy for
-checking the core logic on its own.
+All 14 should pass, including a full detect-and-repair run, the FIM-watcher unit tests,
+and regression tests for defects found during development (see
+[docs/AUDIT-FINDINGS.md](docs/AUDIT-FINDINGS.md)) — none of it needs the heavy
+infrastructure (Docker/Wazuh) to run, which is handy for checking the core logic on its
+own.
 
 ## For the technical reader: how detection actually fires
 

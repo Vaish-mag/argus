@@ -162,7 +162,7 @@ $ pip install -r requirements.txt
 $ python -m pytest -q
 ```
 
-**✅ Verify:** ends with **`8 passed`**. This proves the whole detect→heal loop (and the
+**✅ Verify:** ends with **`14 passed`**. This proves the whole detect→heal loop (and the
 lightweight FIM watcher from Step 7) works before you add Docker or Wazuh — a clean
 baseline for debugging later. 🎉
 
