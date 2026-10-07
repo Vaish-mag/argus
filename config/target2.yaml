@@ -1,0 +1,49 @@
+# Argus runtime configuration -- Target #2: MiniGallery
+#
+# Proves the controller is target-agnostic: this file is the ONLY thing that
+# differs from config/argus.yaml. No code in argus/ changes to protect a
+# second, independent application. Run with:
+#   python run_argus.py --config config/target2.yaml init-golden
+#   python run_argus.py --config config/target2.yaml watch
+#   python run_argus.py --config config/target2.yaml run
+
+# --- what we protect -------------------------------------------------------
+protected_container: "argus-target2"
+golden_image: "argus/target2-golden:latest"      # tag: docker tag php:8.2-apache argus/target2-golden:latest
+protected_path: "/var/www/html"                  # guarded path INSIDE the container
+host_webroot: "runtime/webroot2"                 # the HOST side of that bind mount
+isolated_network: "target2_protected"            # docker network the main sits on
+health_url: "http://localhost:8081/index.php"    # promotion health check
+host_port: 8081                                  # host port a restored main republishes
+host_bind: "127.0.0.1"                           # loopback only, never the LAN
+
+# --- snapshot / clone cadence -----------------------------------------------
+snapshot_interval_sec: 900                        # 15 minutes (spec: 10-20 min); use 60 for a live demo
+snapshots_dir: "results/snapshots2"
+golden_manifest: "config/golden_manifest2.json"   # built once from the pristine web root
+golden_webroot: "runtime/golden_webroot2"          # pristine CONTENT copy matching that manifest
+keep_snapshots: 12
+
+# paths under the web root that legitimately change (so churn != tampering).
+# Kept EMPTY, same reasoning as config/argus.yaml: this demo specifically wants
+# an uploaded file in uploads/ to be caught as tampering, not waved through.
+volatile_paths: []
+
+# --- detection ---------------------------------------------------------------
+wazuh_alerts_path: "runtime/wazuh_alerts2.json"
+breach_signal_path: "runtime/breach2.flag"
+attack_marker_path: "runtime/attack_marker2.json"
+anomaly_threshold: null                          # null = model-calibrated cutoff (see config/argus.yaml)
+anomaly_confirm_windows: 3
+access_log_path: "runtime/logs/access2.log"       # outside the watched web root
+attack_marker_max_age_sec: 300
+anomaly_model_path: "results/anomaly_model2.joblib"
+
+# --- healing / forensics ------------------------------------------------------
+forensics_dir: "results/forensics2"
+commit_forensic_image: false                      # keep this demo target lightweight on disk
+health_retries: 25
+health_retry_delay_sec: 2.0
+
+# --- metrics -------------------------------------------------------------------
+incidents_csv: "results/incidents2.csv"

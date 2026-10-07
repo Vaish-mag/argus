@@ -1,0 +1,80 @@
+# Argus lab topology.
+#
+# Two networks by design:
+#   argus_protected  - where the "main" DVWA instance lives; the healer disconnects a
+#                      compromised container from THIS network to isolate it.
+#   argus_attack     - the attacker container's reachability into the target. Keeping it
+#                      separate makes "cut the network" observable and keeps the whole
+#                      lab isolated from your real LAN.
+#
+# The DVWA web root is bind-mounted to ./runtime/webroot on the host so the Wazuh agent
+# (running on the WSL2 host) can do file-integrity monitoring on it directly, and so the
+# Argus controller can snapshot/restore without needing to exec into the container.
+#
+# NOTE: DVWA is a DELIBERATELY vulnerable teaching application. It must ONLY ever run on
+# this isolated lab network, never exposed to a real network. That is a Limitations point.
+
+services:
+  web:
+    image: vulnerables/web-dvwa:latest      # standard academic vulnerable target
+    container_name: argus-web
+    networks:
+      - argus_protected
+      - argus_attack
+    ports:
+      - "127.0.0.1:8080:80"                  # loopback only: DVWA must never be reachable from the LAN
+    volumes:
+      - ./runtime/webroot:/var/www/html      # host-visible web root for FIM + snapshots
+    restart: "no"                            # Argus manages lifecycle, not Docker
+
+  attacker:
+    image: alpine:3.19                       # minimal; the harness runs from the host anyway
+    container_name: argus-attacker
+    networks:
+      - argus_attack
+    command: ["sleep", "infinity"]
+    profiles: ["attack"]                     # only started for experiments: --profile attack
+
+  # --- Target #2: MiniGallery ------------------------------------------------
+  # A small demo target we wrote ourselves (lab/target2_app/), protected by a
+  # second, independent Argus instance via config/target2.yaml -- proving the
+  # controller is target-agnostic with ZERO changes to argus/. See
+  # docs/architecture.md and lab/target2_app/upload.php for the (deliberately
+  # unfixed) vulnerability this target demonstrates.
+  target2:
+    image: php:8.2-apache                    # tagged argus/target2-golden:latest once seeded
+    container_name: argus-target2
+    networks:
+      - target2_protected
+      - target2_attack
+    ports:
+      - "127.0.0.1:8081:80"                  # loopback only, same as argus-web (audit finding M6)
+    volumes:
+      - ./runtime/webroot2:/var/www/html     # host-visible web root for FIM + snapshots
+    restart: "no"                            # Argus manages lifecycle, not Docker
+
+  attacker2:
+    image: alpine:3.19
+    container_name: argus-attacker2
+    networks:
+      - target2_attack
+    command: ["sleep", "infinity"]
+    profiles: ["attack"]
+
+networks:
+  argus_protected:
+    name: argus_protected
+    driver: bridge
+    internal: false
+  argus_attack:
+    name: argus_attack
+    driver: bridge
+    internal: true                           # attacker cannot reach the internet
+  target2_protected:
+    name: target2_protected
+    driver: bridge
+    internal: false
+  target2_attack:
+    name: target2_attack
+    driver: bridge
+    internal: true                           # isolated from argus_attack too -- two independent labs

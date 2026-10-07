@@ -1,0 +1,51 @@
+<!--
+  Argus custom Wazuh rules.
+  Place the contents inside /var/ossec/etc/rules/local_rules.xml on the Wazuh manager
+  (or agent-local ruleset). They build on Wazuh's built-in syscheck (FIM) rules and raise
+  the severity of any change inside the protected web root so that our active-response
+  trigger fires.
+
+  Parent rules (Wazuh built-ins):
+    554  File added to the system
+    550  Integrity checksum changed
+    553  File deleted from the system
+
+  PATH MATCHING. Wazuh reports the path of the file *as the agent sees it*, i.e. the HOST
+  path being monitored (ossec-fim.conf watches <repo>/runtime/webroot), NOT the
+  container-internal /var/www/html. An earlier version of these rules matched
+  "/var/www/html/" and therefore could never fire. The pattern below matches the host
+  directory by its tail, so it works wherever the repo is checked out; it also covers the
+  second lab target (runtime/webroot2).
+
+  STATUS: rule syntax follows the Wazuh ruleset documentation but has NOT been exercised
+  against a live Wazuh manager in this project -- the lightweight watcher
+  (argus.detection.FIMWatcher) is the detection path that is tested and demonstrated.
+  Treat this file as a reference configuration and verify with `wazuh-logtest` before use.
+-->
+<group name="argus,syscheck,">
+
+  <!-- A NEW file appeared in the web root: classic webshell-upload / dropper signature -->
+  <rule id="100200" level="12">
+    <if_sid>554</if_sid>
+    <field name="file" type="pcre2">/runtime/webroot2?/</field>
+    <description>Argus: new file created in protected web root (possible webshell/dropper)</description>
+    <group>argus_breach,attack,</group>
+  </rule>
+
+  <!-- An EXISTING protected file was modified: defacement / injection signature -->
+  <rule id="100201" level="12">
+    <if_sid>550</if_sid>
+    <field name="file" type="pcre2">/runtime/webroot2?/</field>
+    <description>Argus: protected web-root file modified (possible defacement/injection)</description>
+    <group>argus_breach,attack,</group>
+  </rule>
+
+  <!-- A protected file was DELETED: tampering / anti-forensics signature -->
+  <rule id="100202" level="12">
+    <if_sid>553</if_sid>
+    <field name="file" type="pcre2">/runtime/webroot2?/</field>
+    <description>Argus: protected web-root file deleted (possible tampering)</description>
+    <group>argus_breach,attack,</group>
+  </rule>
+
+</group>
